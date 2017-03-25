@@ -8,6 +8,17 @@ import racecar.series as Series
 
 from . import ureg
 
+# define other non-Imperial, non-SI power units (from Wikipedia)
+ureg.define('cavalo-vapor = 735 N.m/s = cv') # portuguese
+ureg.define('Pferdestarke = 1 cv = PS') # german
+ureg.define('cheval = 1 cv = ch') # french
+ureg.define('paardenkracht = 1 cv = pk') # dutch
+ureg.define('Лошадиная сила = 1 cv = лс') # russian
+ureg.define('hästkraft = 1 cv = hk') # swedish
+ureg.define('hevosvoima = 1 cv = hv') # finnish
+ureg.define('lóerő = 1 cv = LE') # hungarian
+ureg.define('cal-putere = 1 cv = CP') # romanian
+
 class Racecar:
     """
     Class that describes a racecar, with its many systems (engine, suspension, etc),
@@ -69,6 +80,12 @@ class Engine:
         else:
             return self.torque_data(x)
 
+    def power(self, x = None):
+        if x is None:
+            return self.max_power
+        else:
+            return (self.torque_data(x) * x).to('cv')
+
     def import_torque_data(self, csv_file,
                            units = ('rpm', 'N.m')):
         # units specified in pint format
@@ -80,13 +97,13 @@ class Engine:
 
         self.max_torque = max(self.torque_data, key=lambda x: x[1])[1]
 
-        max_hp = ureg('horsepower')
+        max_hp = ureg('cv')
         for rpm, tq in self.torque_data:
-            hp = (rpm * tq).to('horsepower')
+            hp = (rpm * tq)
             if hp > max_hp:
                 max_hp = hp
 
-        self.max_power = max_hp
+        self.max_power = max_hp.to('cv')
 
 
 class Transmission:
