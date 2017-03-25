@@ -15,4 +15,4 @@ __author__ = 'Limão <dev@lmnice.me>'
 
 from pint import UnitRegistry
 
-g_units = UnitRegistry()
+ureg = UnitRegistry()
