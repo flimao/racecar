@@ -65,6 +65,11 @@ class Racecar:
         self.mechloss = mechloss
 
     def wheel_torque(self, v_or_rpm, gear, mechloss = None):
+        """
+        Calculate total torque at the wheels.
+        First parameter can be either speed or rpm. If it's speed, it's
+            first converted into rpm given the gear.
+        """
 
         if v_or_rpm.dimensionality == ureg('km/hr').dimensionality:
             rpm = self.rpm_from_speed_gear(v = v_or_rpm, gear = gear)
@@ -198,37 +203,119 @@ class Racecar:
 
             resultant = wheel_force - air_resistance
 
-            print('{0:3.0~f} (gear {1:n}): R = {2:6.0~f}'.format(
-                s, g, resultant.to('kgf')
-            ))
+            if resultant_prev > ureg('0 N') and resultant < ureg('0 N'):
+                 return s
+            else:
+                resultant_prev = resultant
 
-            #if resultant_prev > ureg('0 N') and resultant < ureg('0 N'):
-            #     return s
-            #else:
-            #    resultant_prev = resultant
-
-    def accelerateTo(self, destination, shiftpoints,
+    def go(self, destination, shiftpoints,
                      v0 = ureg('0 km/hr'),
                      launchrpm = None,
                      trans_shift_time = ureg('0 s'),
-                     rpm_incr = ureg('20 rpm')):
+                     time_incr = ureg('0.01 s'),
+                     verbose = False):
 
-        lauchrpm = lauchrpm or self.max_accel_at_gear(gear = 1,
-                                                      rpm_incr = rpm_incr)
+        g0 = self.best_gear_at_speed(v=v0)
+        launchrpm = launchrpm or self.max_accel_at_gear(gear = g0)[0]
 
         dist = 0.0 * ureg.meters
         speed = v0
         total_time = 0.0 * ureg.s
+        total_time_launching = 0.0 * ureg.s
+
+        variables = [ dist,
+                      speed,
+                      total_time]
+
+        if verbose:
+            print('Initial speed is {0:3.0~f}'.format(speed))
+            print('    End of simulation happens at ', end='')
+
+        if destination.dimensionality == dist.dimensionality:
+            stop_crit_index = 0
+            if verbose:
+                print('total distance of {0:6.2~f}'.format(destination))
+
+        elif destination.dimensionality == speed.dimensionality:
+            stop_crit_index = 1
+            if verbose:
+                print('final speed of {0:3.0~f}'.format(destination))
+
+        else:
+            stop_crit_index = 3
+            if verbose:
+                print('total time of {0:4.0~f}'.format(destination))
+
+        radius = self.tires.driven.fulld / 2
 
         # first gear
         # launching in launchrpm, riding the clutch so max tire accel is achieved
+        rpm = self.rpm_from_speed_gear(v=speed, gear=g0)
+
+        if rpm < launchrpm and g0 == 1:
+            launching = True
+
+        else:
+            launching = False
+
+        # Go!
+        g = g0
+        i = 0
+
+        stop_crit = variables[stop_crit_index]
+
+        while stop_crit <= destination:
+            i += 1
+
+            if launching:
+                total_time_launching += time_incr
+                wheel_torque = self.wheel_torque(launchrpm, g)
+
+            else:
+                wheel_torque = self.wheel_torque(rpm, gear = g)
+
+            wheel_force = wheel_torque / radius
+            resistance = self.body.resistance(v = speed)
+            resultant = wheel_force - resistance
+
+            accel_engine = resultant / self.mass.mass
+            accel_tire = self.tires.driven.max_accel
+            accel = min(accel_engine, accel_tire)
+
+            dist += speed * time_incr + (accel / 2) * time_incr**2
+            total_time += time_incr
+            speed += accel * time_incr
+
+            variables = [ dist, speed, total_time ]
+
+            stop_crit = variables[stop_crit_index]
+
+            if divmod(i, 100)[1] == 0:
+                print('Still running... stop criterion is at {0:4.0~f}'.format(
+                    stop_crit
+                ))
+                print('    Speed: {0:3.0~f}, Accel:{1:1.2~f}'.format(speed,
+                                                accel.to('G')))
 
 
-        for rpm in np.linspace(launchrpm.magnitude,
-                               shiftpoints[0].magnitude,
-                               rpm_incr.magnitude) * rpm_incr.units:
-            pass
+            rpm = self.rpm_from_speed_gear(v = speed, gear = g)
+            if rpm > shiftpoints[g-1]:
+                g += 1
+                rpm = self.rpm_from_speed_gear(v = speed, gear = g)
+                total_time += trans_shift_time
 
+            if rpm > launchrpm:
+                launching = False
+
+        if verbose:
+            print('\nEnd of simulation!')
+            print('Stats:')
+            print('    Total time {0:7.3~f}'.format(total_time))
+            print('    Total distance {0:5.1~f}'.format(dist))
+            print('    Final speed {0:4.1~f}'.format(speed))
+            print('-----------')
+            print('    Time launching {0:4.1~f}'.format(total_time_launching))
+            print('    Total shifts {0:n}'.format(g-g0))
 
 class Engine:
     """
@@ -399,7 +486,7 @@ class MassDistribution:
 
 class Tire:
     """
-    Class that dscribes a tire (wheel diameter, tread width, etc)
+    Class that describes a tire (wheel diameter, tread width, etc)
     Accepts a string parameter (spec) which is converted to aforementioned attributes
     """
 
@@ -460,14 +547,15 @@ class Tire:
 
         global ureg
 
+
         default_MA = 1 * ureg.G
         default_ML = 1 * ureg.G
 
         re_str = r'(P|LT|ST|T)?(\d{2,3})(?:\/|-)(\d{2})(R|B|D|-)(\d{1,2})'
-        re_str += r'(?:\s([0-9]{2,3})(\((?:A[1-8]|[B-Z])\)?))?'
-        re_str += r'(?:\s(?:MA:(\d\.\d\d))?)?'
-        re_str += r'(?:\s(?:MB:(\d\.\d\d))?)?'
-        re_str += r'(?:\s(?:ML:(\d\.\d\d))?)?'
+        re_str += r'(?:\s([0-9]{2,3})(\(?(?:A[1-8]|[B-Z])\)?))?'
+        re_str += r'(?:\s(?:MA:(\d\.\d\d)))?'
+        re_str += r'(?:\s(?:MB:(\d\.\d\d)))?'
+        re_str += r'(?:\s(?:ML:(\d\.\d\d)))?'
 
         spec_re = re.match(re_str, spect)
 

@@ -14,7 +14,7 @@ import racecar.racecar as RC
 
 from racecar import ureg, airdensity
 
-csvf_piggyback = './data/torque-pyggyback.csv'
+csvf_piggyback = './data/torque-piggyback.csv'
 csvf_oem = './data/torque-oem.csv'
 csvf_units = [ 'rpm', 'N.m' ]
 
@@ -26,7 +26,11 @@ gears = [ 4.06,
             0.91 * 3.14/4.06,
             0.76 * 3.14/4.06]
 
-tire_spec = '225/45R17 91V MA:1.00 ML:0.75'
+trans_shift_time = ureg('8 milliseconds')
+
+mechloss = 0.15
+
+tire_spec = r'225/45R17 91V MA:0.90 ML:0.75'
 
 curb = ureg('1350 kg')
 
@@ -39,9 +43,9 @@ frontal_area = ureg('3.3557 m**2')
 
 #torque = mRC.Series(series = csvf, units = ['revolutions/minute', 'N.m'])
 
-piggyback = RC.Racecar(mechloss = 0.85)
+piggyback = RC.Racecar(mechloss = 0.25)
 
-oem = RC.Racecar(mechloss = 0.85)
+oem = RC.Racecar(mechloss = 0.25)
 
 engine = RC.Engine(racecar = piggyback,
                    torque_data = csvf_piggyback, torque_units = csvf_units)
@@ -65,3 +69,12 @@ body = RC.Body(racecar = piggyback,
 engine.torque_data.to([ None, ureg('kgf.m').units ])
 
 rpm = engine.torque_data[0][0].units
+
+v100 = ureg('100 km/hr')
+dqt = ureg('1/4 mile')
+
+shifts = piggyback.shiftpoints()
+
+piggyback.go(v100, shiftpoints = shifts,
+             trans_shift_time = trans_shift_time,
+             verbose = True)
