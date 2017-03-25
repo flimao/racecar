@@ -14,43 +14,53 @@ import racecar.racecar as RC
 
 from racecar import ureg, airdensity
 
-csvf_jetta_unichip = './data/torque-jetta-unichip.csv'
-csvf_jetta_oem = './data/torque-jetta-oem.csv'
+csvf_piggyback = './data/torque-pyggyback.csv'
+csvf_oem = './data/torque-oem.csv'
 csvf_units = [ 'rpm', 'N.m' ]
 
-jetta_gears = [ 4.06,
-                3.46,
-                2.05,
-                1.3,
-                0.9,
-                0.704,
-                0.588]
+gears = [ 4.06,
+            3.46,
+            2.05,
+            1.3,
+            0.9,
+            0.91 * 3.14/4.06,
+            0.76 * 3.14/4.06]
+
+tire_spec = '225/45R17 91V MA:1.00 ML:0.75'
+
+curb = ureg('1350 kg')
+
+l = ureg('4.644 m')
+w = ureg('1.778 m')
+h = ureg('1.473 m')
+
+cx = 0.28
+frontal_area = ureg('3.3557 m**2')
 
 #torque = mRC.Series(series = csvf, units = ['revolutions/minute', 'N.m'])
 
-jetta_unichip = RC.Racecar()
+piggyback = RC.Racecar(mechloss = 0.85)
 
-jetta_oem = RC.Racecar(mechloss = 0.85)
+oem = RC.Racecar(mechloss = 0.85)
 
-engine = RC.Engine(racecar = jetta_unichip,
-                   torque_data = csvf_jetta_unichip, torque_units = csvf_units)
+engine = RC.Engine(racecar = piggyback,
+                   torque_data = csvf_piggyback, torque_units = csvf_units)
 
-trans = RC.Transmission(racecar = jetta_unichip,
-                        ratios = jetta_gears)
+trans = RC.Transmission(racecar = piggyback,
+                        ratios = gears)
 
-tires = RC.Tires(racecar = jetta_unichip,
-                 spec = '225/45R17 91V MA:1.00 ML:0.75',
-                 max_accel = 1 * ureg.G,
-                 max_brake = 1 * ureg.G,
-                 max_lateral_load = 0.75 * ureg.G)
+tires = RC.Tires(racecar = piggyback,
+                 spec = tire_spec)
 
-massd = RC.MassDistribution(racecar = jetta_unichip,
-                            curb_mass =1350 * ureg('kg'),
-                            length = 4.2 * ureg.meters)
+massd = RC.MassDistribution(racecar = piggyback,
+                            curb_mass = curb,
+                            length = l,
+                            width = w,
+                            height = h)
 
-body = RC.Body(racecar = jetta_unichip,
-               cx = 0.28,
-               frontal_area = 3.3557 * ureg.m**2) # 29 cv at 120 km\h
+body = RC.Body(racecar = piggyback,
+               cx = cx,
+               frontal_area = frontal_area) # 29 cv at 120 km\h
 
 engine.torque_data.to([ None, ureg('kgf.m').units ])
 

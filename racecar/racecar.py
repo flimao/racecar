@@ -47,8 +47,10 @@ class Racecar:
 
         if massd is None:
             self.mass = MassDistribution(racecar = self,
-                                         curb_mass =1600 * ureg('kilogram'),
-                                         length =3.0 * ureg.meters)
+                                         curb_mass = ureg('1300 kg'),
+                                         length = ureg('4.644 m'),
+                                         width = ureg('1.778 m'),
+                                         height = ureg('1.473 m'))
         else:
             self.mass = massd
 
@@ -62,10 +64,17 @@ class Racecar:
 
         self.mechloss = mechloss
 
-    def wheel_torque(self, rpm, gear, mechloss = None):
+    def wheel_torque(self, v_or_rpm, gear, mechloss = None):
+
+        if v_or_rpm.dimensionality == ureg('km/hr').dimensionality:
+            rpm = self.rpm_from_speed_gear(v = v_or_rpm, gear = gear)
+        else:
+            rpm = v_or_rpm
 
         mechloss = mechloss or self.mechloss
         return self.engine.torque(rpm) * self.trans.ratio(gear) * (1-mechloss)
+
+
 
     def speed_from_rpm_gear(self, rpm, gear, unit = 'km/hr'):
         speed = (rpm / self.trans.ratio(gear)) * self.tires.driven.fulld / 2
@@ -111,14 +120,92 @@ class Racecar:
 
         return rpm.to(ureg(unit).units)
 
+
     def best_gear_at_speed(self, v):
         """
         Calculate the best gear to be in at a given speed. This will be the
-        gear that transmits the moste torque to the wheels
+        gear that transmits the most torque to the wheels
         """
-        for g in self.trans.ngears:
-            pass
 
+        max_wtq = ureg('0 N.m')
+        best_gear = 1
+
+        for g in range(self.trans.ngears):
+
+            rpm = self.rpm_from_speed_gear(v, gear = g + 1)
+            if rpm > self.engine.redline:
+                continue
+            try:
+                wheel_torque = self.wheel_torque(v_or_rpm = rpm, gear = g + 1)
+
+            except ValueError: # RPM out of range
+                wheel_torque = 0 * max_wtq.units
+
+            if wheel_torque > max_wtq:
+                best_gear = g + 1
+                max_wtq = wheel_torque
+
+        return best_gear
+
+    def shiftpoints(self, v_incr = ureg('1 km/hr')):
+        """
+        Calculates the best shiftpoints for each gear
+        Returns a list with each shiftpoint
+        """
+
+        max_theo_speed = self.speed_from_rpm_gear(rpm = self.engine.redline,
+                                             gear = self.trans.ngears)
+
+        shiftpoints = []
+
+        n = max_theo_speed.magnitude / v_incr.magnitude
+
+        for s in np.linspace(0,
+                             max_theo_speed.magnitude,
+                             n) * v_incr.units:
+            best_gear_0 = self.best_gear_at_speed(v = s)
+            best_gear_1 = self.best_gear_at_speed(v = s + v_incr)
+
+            if best_gear_0 < best_gear_1:
+                rpm = self.rpm_from_speed_gear(v = s, gear = best_gear_0)
+
+                shiftpoints.append(rpm)
+
+        return shiftpoints
+
+    def top_speed(self, v_incr = ureg('1 km/hr')):
+        """
+        Estimates the top speed
+        """
+
+        max_theo_speed = self.speed_from_rpm_gear(rpm = self.engine.redline,
+                                             gear = self.trans.ngears)
+
+        top_speed = ureg('0 km/hr')
+
+        resultant_prev = ureg('10**5 kgf')
+
+        n = max_theo_speed.magnitude / v_incr.magnitude
+
+        # will be starting at 20 km/hr, because there is no torque at standstill
+        for s in np.linspace(20, max_theo_speed.magnitude,
+                             n) * v_incr.units:
+            g = self.best_gear_at_speed(v = s)
+
+            wheel_torque = self.wheel_torque(v_or_rpm = s, gear = g)
+            wheel_force = wheel_torque / (self.tires.driven.fulld / 2)
+            air_resistance = self.body.resistance(v = s)
+
+            resultant = wheel_force - air_resistance
+
+            print('{0:3.0~f} (gear {1:n}): R = {2:6.0~f}'.format(
+                s, g, resultant.to('kgf')
+            ))
+
+            #if resultant_prev > ureg('0 N') and resultant < ureg('0 N'):
+            #     return s
+            #else:
+            #    resultant_prev = resultant
 
     def accelerateTo(self, destination, shiftpoints,
                      v0 = ureg('0 km/hr'),
@@ -200,6 +287,8 @@ class Engine:
         max_torque = max(self.torque_data, key=lambda x: x[1])
         self.max_torque = max_torque[1]
         self.max_torque_rpm = max_torque[0]
+
+        self.redline = self.torque_data[-1][0]
 
         max_hp = ureg('cv')
         max_hp_rpm = self.idle
@@ -291,14 +380,16 @@ class MassDistribution:
     Class that describes how the racecar's mass is distributed along the frame
     """
 
-    def __init__(self, racecar, curb_mass, length):
+    def __init__(self, racecar, curb_mass, length, width, height):
 
         # racecar is a Racecar object
         self.racecar = racecar
         racecar.mass = self
 
-        # length is a quantity in length units
+        # length, width, height is a quantity in length units
         self.length = length
+        self.width = width
+        self.height = height
 
         # mass is a quantity with mass units
         self.mass = curb_mass - self.racecar.engine.mass - self.racecar.trans.mass
@@ -515,12 +606,12 @@ class Body:
         return resistance
 
     def calibrate_area(self, v, power, unit = 'm**2'):
-
-        global airdensity
-
         """
         Calculate frontal area from speed and power consumed at said speed
         """
+
+        global airdensity
+
         area = 2 * power / (airdensity * v**3 * self.cx)
 
         self.frontal_area = area.to(ureg(unit).units)
