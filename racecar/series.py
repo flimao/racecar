@@ -57,7 +57,7 @@ class Series:
 
     def to(self, units):
         """
-        Convert units.
+        Convert units in place.
         units is a list with two items, same as the unit() setter
         """
 

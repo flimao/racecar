@@ -38,10 +38,16 @@ engine = RC.Engine(racecar = jetta_unichip,
 trans = RC.Transmission(racecar = jetta_unichip,
                         ratios = jetta_gears)
 
-engine.torque_data.to([None, ureg('kgf.m')])
+tires = RC.Tires(racecar = jetta_unichip,
+                 spec = '225/45R17 91V MA:1.00 ML:0.75',
+                 max_accel = 1 * ureg.G,
+                 max_brake = 1 * ureg.G,
+                 max_lateral_load = 0.75 * ureg.G)
 
 massd = RC.MassDistribution(racecar = jetta_unichip,
                             curb_mass =1650 * ureg('kg'),
                             length = 4.2 * ureg.meters)
+
+engine.torque_data.to([ None, ureg('kgf.m').units ])
 
 rpm = engine.torque_data[0][0].units
