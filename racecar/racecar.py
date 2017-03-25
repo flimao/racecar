@@ -3,6 +3,7 @@
 
 import csv
 import pint
+import numpy as np
 import re
 
 import racecar.series as Series
@@ -28,7 +29,8 @@ class Racecar:
     Class that describes a racecar, with its many systems (engine, suspension, etc),
     """
 
-    def __init__(self, engine = None, trans = None, massd = None, tires = None):
+    def __init__(self, engine = None, trans = None, massd = None, tires = None,
+                 mechloss = 0.15):
 
         global ureg
 
@@ -54,19 +56,68 @@ class Racecar:
             self.tires = Tires(racecar = self,
                                spec = '225/45R17')
 
+        self.mechloss = mechloss
+
+    def wheel_torque(self, rpm, gear, mechloss = None):
+
+        mechloss = mechloss or self.mechloss
+        return self.engine.torque(rpm) * self.trans.ratio(gear) * (1-mechloss)
+
     def speed_from_rpm_gear(self, rpm, gear, unit = 'km/hr'):
         speed = (rpm / self.trans.ratio(gear)) * self.tires.driven.fulld / 2
 
         return speed.to(ureg(unit))
 
+    def acceleration_from_rpm_gear(self, rpm, gear, unit = 'G'):
+        """"
+
+        """
+
+        wheel_torque = self.wheel_torque(rpm, gear)
+        wheel_radius = self.tires.driven.fulld/2
+        wheel_force = wheel_torque / wheel_radius
+        accel = wheel_force / self.mass.mass
+
+        return accel.to(ureg(unit))
+
+    def max_accel_at_gear(self, gear = 1, rpm_incr = 20 * ureg.rpm,
+                          unit = 'G'):
+
+        max_accel = 0 * ureg(unit).units
+        max_accel_rpm = 0 * rpm_incr.units
+
+        for rpm in np.linspace(self.engine.torque_data[0][0].magnitude,
+                               self.engine.torque_data[-1][0].magnitude,
+                               rpm_incr.magnitude) * rpm_incr.units:
+
+            accel = self.acceleration_from_rpm_gear(rpm = rpm,
+                                                           gear = gear)
+            if accel > max_accel:
+                max_accel = accel
+                max_accel_rpm = rpm
+
+        return [ max_accel_rpm, max_accel.to(ureg(unit).units) ]
+
     def accelerateTo(self, destination, shiftpoints,
-                     trans_shift_time = 0 * ureg.s,
-                     time_incr = 0.5 * ureg.s):
-        dist = 0.0
-        speed = 0.0
-        total_time = 0.0
+                     launchrpm=None,
+                     trans_shift_time=0 * ureg.s,
+                     rpm_incr=20 * ureg.rpm):
+
+        lauchrpm = lauchrpm or self.engine.max_torque_rpm
+
+        dist = 0.0 * ureg.meters
+        speed = 0.0 * ureg('km/hr')
+        total_time = 0.0 * ureg.s
+
+        # first gear
+        # launching in launchrpm, riding the clutch so max tire accel is achieved
 
 
+
+        for rpm in np.linspace(launchrpm.magnitude,
+                               shiftpoints[0].magnitude,
+                               rpm_incr.magnitude) * rpm_incr.units:
+            pass
 
 
 class Engine:
@@ -74,7 +125,9 @@ class Engine:
     Class that describes the engine
     """
 
-    def __init__(self, racecar, mass =0 * ureg.kilogram, idle = 800 * ureg.rpm,
+    def __init__(self, racecar, mass =0 * ureg.kilogram,
+                 idle = 800 * ureg.rpm,
+                 redline = None,
                  torque_data = None, torque_units = None):
 
         # racecar is a Racecar object
@@ -91,6 +144,7 @@ class Engine:
         self.max_power = None
 
         self.idle = idle
+        self.redline = redline
 
         if torque_data and torque_units:
             self.import_torque_data(csv_file = torque_data,
@@ -100,6 +154,8 @@ class Engine:
 
         if x is None:
             return self.max_torque
+        elif x not in self.torque_data:
+            raise ValueError('{0:5.0~f} outside of torque data range.'.format(x))
         else:
             return self.torque_data(x)
 
@@ -118,15 +174,20 @@ class Engine:
         self.torque_data = Series.Series(series = csv_file,
                                       units = units)
 
-        self.max_torque = max(self.torque_data, key=lambda x: x[1])[1]
+        max_torque = max(self.torque_data, key=lambda x: x[1])
+        self.max_torque = max_torque[1]
+        self.max_torque_rpm = max_torque[0]
 
         max_hp = ureg('cv')
+        max_hp_rpm = self.idle
         for rpm, tq in self.torque_data:
             hp = (rpm * tq)
             if hp > max_hp:
                 max_hp = hp
+                max_hp_rpm = rpm
 
         self.max_power = max_hp.to('cv')
+        self.max_power_rpm = max_hp_rpm
 
 
 class Transmission:

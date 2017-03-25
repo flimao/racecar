@@ -46,6 +46,7 @@ class Series:
 
         x must be a Quantity
         """
+
         for i in range(len(self.series[:])-1):
             dp_0 = self.series[i]
             dp_1 = self.series[i+1]
@@ -169,12 +170,17 @@ class Series:
         return iter(self.series)
 
     def __contains__(self, item):
-        x = item[0]
-        lim_x_1 = self.series[0]
-        lim_x_2 = self.series[-1]
-        if lim_x_1 < x < lim_x_2:
+        try: # item is a tuple (x, y)
+            x = item[0]
+
+        except (TypeError, IndexError): # item is just the x
+            x = item
+
+        lim_x_1 = self.series[0][0]
+        lim_x_2 = self.series[-1][0]
+        if lim_x_1 <= x <= lim_x_2:
             return True
-        elif lim_x_2 < x < lim_x_1:
+        elif lim_x_2 <= x <= lim_x_1:
             return True
         else:
             return False

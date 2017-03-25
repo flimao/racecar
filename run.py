@@ -30,7 +30,7 @@ jetta_gears = [ 4.06,
 
 jetta_unichip = RC.Racecar()
 
-jetta_oem = RC.Racecar()
+jetta_oem = RC.Racecar(mechloss = 0.85)
 
 engine = RC.Engine(racecar = jetta_unichip,
                    torque_data = csvf_jetta_unichip, torque_units = csvf_units)
@@ -45,7 +45,7 @@ tires = RC.Tires(racecar = jetta_unichip,
                  max_lateral_load = 0.75 * ureg.G)
 
 massd = RC.MassDistribution(racecar = jetta_unichip,
-                            curb_mass =1650 * ureg('kg'),
+                            curb_mass =1350 * ureg('kg'),
                             length = 4.2 * ureg.meters)
 
 engine.torque_data.to([ None, ureg('kgf.m').units ])
