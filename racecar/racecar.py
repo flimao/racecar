@@ -105,16 +105,32 @@ class Racecar:
 
         return [ max_accel_rpm, max_accel.to(ureg(unit).units) ]
 
+    def rpm_from_speed_gear(self, v, gear, unit = 'rpm'):
+        wheel_speed = v / (self.tires.driven.fulld / 2)
+        rpm = wheel_speed * self.trans.ratio(gear)
+
+        return rpm.to(ureg(unit).units)
+
+    def best_gear_at_speed(self, v):
+        """
+        Calculate the best gear to be in at a given speed. This will be the
+        gear that transmits the moste torque to the wheels
+        """
+        for g in self.trans.ngears:
+            pass
+
+
     def accelerateTo(self, destination, shiftpoints,
-                     launchrpm=None,
-                     trans_shift_time=0 * ureg.s,
-                     rpm_incr=20 * ureg.rpm):
+                     v0 = ureg('0 km/hr'),
+                     launchrpm = None,
+                     trans_shift_time = ureg('0 s'),
+                     rpm_incr = ureg('20 rpm')):
 
         lauchrpm = lauchrpm or self.max_accel_at_gear(gear = 1,
                                                       rpm_incr = rpm_incr)
 
         dist = 0.0 * ureg.meters
-        speed = 0.0 * ureg('km/hr')
+        speed = v0
         total_time = 0.0 * ureg.s
 
         # first gear
