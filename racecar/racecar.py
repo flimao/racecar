@@ -8,7 +8,7 @@ import re
 
 import racecar.series as Series
 
-from . import ureg
+from . import ureg, airdensity
 
 # define acceleration in G
 ureg.define('gravity = 9.80665 m/(s**2) = G')
@@ -30,7 +30,7 @@ class Racecar:
     """
 
     def __init__(self, engine = None, trans = None, massd = None, tires = None,
-                 mechloss = 0.15):
+                 body = None, mechloss = 0.15):
 
         global ureg
 
@@ -56,6 +56,10 @@ class Racecar:
             self.tires = Tires(racecar = self,
                                spec = '225/45R17')
 
+        if body is None:
+            self.body = Body(racecar = self,
+                             cx = 0.28, frontal_area = 1.5)
+
         self.mechloss = mechloss
 
     def wheel_torque(self, rpm, gear, mechloss = None):
@@ -80,6 +84,9 @@ class Racecar:
 
         return accel.to(ureg(unit))
 
+    def power_to_weight(self):
+        return self.engine.max_power / self.mass.mass
+
     def max_accel_at_gear(self, gear = 1, rpm_incr = 20 * ureg.rpm,
                           unit = 'G'):
 
@@ -103,7 +110,8 @@ class Racecar:
                      trans_shift_time=0 * ureg.s,
                      rpm_incr=20 * ureg.rpm):
 
-        lauchrpm = lauchrpm or self.engine.max_torque_rpm
+        lauchrpm = lauchrpm or self.max_accel_at_gear(gear = 1,
+                                                      rpm_incr = rpm_incr)
 
         dist = 0.0 * ureg.meters
         speed = 0.0 * ureg('km/hr')
@@ -111,7 +119,6 @@ class Racecar:
 
         # first gear
         # launching in launchrpm, riding the clutch so max tire accel is achieved
-
 
 
         for rpm in np.linspace(launchrpm.magnitude,
@@ -462,3 +469,43 @@ class Tires:
         else:
             self.driven = [ self.front, self.rear ]
 
+class Body:
+    """"
+    Class that describes the body aerodynamics.
+    """
+
+    def __init__(self, racecar, cx, frontal_area):
+
+        # racecar is a Racecar object
+        self.racecar = racecar
+        racecar.body = self
+
+        self.cx = cx
+        self.frontal_area = frontal_area
+
+    def resistance(self, v, power = False):
+        """
+        Calculate air resistance, in units of Force or Power
+        """
+        global airdensity
+
+        resistance = (1/2) * airdensity * v**2 * self.cx * self.frontal_area
+        resistance.ito('kgf')
+
+        if power:
+            resistance *= v
+            resistance.ito(ureg.cv)
+
+        return resistance
+
+    def calibrate_area(self, v, power, unit = 'm**2'):
+
+        global airdensity
+
+        """
+        Calculate frontal area from speed and power consumed at said speed
+        """
+        area = 2 * power / (airdensity * v**3 * self.cx)
+
+        self.frontal_area = area.to(ureg(unit).units)
+        return self.frontal_area

@@ -16,3 +16,5 @@ __author__ = 'Limão <dev@lmnice.me>'
 from pint import UnitRegistry
 
 ureg = UnitRegistry()
+
+airdensity = 1.225 * ureg('kg/(m**3)')

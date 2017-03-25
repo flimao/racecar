@@ -12,7 +12,7 @@ import racecar as mRC
 
 import racecar.racecar as RC
 
-ureg = mRC.ureg
+from racecar import ureg, airdensity
 
 csvf_jetta_unichip = './data/torque-jetta-unichip.csv'
 csvf_jetta_oem = './data/torque-jetta-oem.csv'
@@ -47,6 +47,10 @@ tires = RC.Tires(racecar = jetta_unichip,
 massd = RC.MassDistribution(racecar = jetta_unichip,
                             curb_mass =1350 * ureg('kg'),
                             length = 4.2 * ureg.meters)
+
+body = RC.Body(racecar = jetta_unichip,
+               cx = 0.28,
+               frontal_area = 3.3557 * ureg.m**2) # 29 cv at 120 km\h
 
 engine.torque_data.to([ None, ureg('kgf.m').units ])
 
