@@ -3,6 +3,7 @@
 
 import csv
 import pint
+import matplotlib.pyplot as plt
 import numpy as np
 import re
 
@@ -79,27 +80,40 @@ class Racecar:
         mechloss = mechloss or self.mechloss
         return self.engine.torque(rpm) * self.trans.ratio(gear) * (1-mechloss)
 
-
-
     def speed_from_rpm_gear(self, rpm, gear, unit = 'km/hr'):
+        """
+        Calculate speed given rpm and gear
+        """
         speed = (rpm / self.trans.ratio(gear)) * self.tires.driven.fulld / 2
 
         return speed.to(ureg(unit))
 
-    def acceleration_from_rpm_gear(self, rpm, gear, unit = 'G'):
-        """"
+    def acceleration_from_rpm_gear(self, rpm, gear,
+                                   resistance = True, unit = 'G'):
+        """
+        Calculate how much acceleration can the engine provide at the given rpm
+        and gear.
 
+        If resistance is True, this subtract from wheel force the air and
+        rolling resistances.
         """
 
         wheel_torque = self.wheel_torque(rpm, gear)
         wheel_radius = self.tires.driven.fulld/2
         wheel_force = wheel_torque / wheel_radius
-        accel = wheel_force / self.mass.mass
+
+        resist = 0
+        if resistance:
+            v = self.speed_from_rpm_gear(rpm = rpm, gear = gear)
+            resist = self.body.resistance(v = v)
+            resist += self.tires.rolling_resistance
+
+        accel = (wheel_force - resist) / self.mass.mass
 
         return accel.to(ureg(unit))
 
-    def power_to_weight(self):
-        return self.engine.max_power / self.mass.mass
+    def weight_to_power(self):
+        return self.mass.curb / self.engine.max_power
 
     def max_accel_at_gear(self, gear = 1, rpm_incr = 20 * ureg.rpm,
                           unit = 'G'):
@@ -117,13 +131,28 @@ class Racecar:
                 max_accel = accel
                 max_accel_rpm = rpm
 
-        return [ max_accel_rpm, max_accel.to(ureg(unit).units) ]
+        return [ max_accel_rpm, max_accel.to(unit) ]
+
+    def min_rpm_tireslip(self, gear, rpm_incr = 20 * ureg.rpm, unit = 'G'):
+        """
+        Calculate the minimum RPM at selected gear that makes tires slip on launch
+        """
+        min_accel = self.tires.driven.max_accel
+
+        for rpm in np.linspace(self.engine.torque_data[0][0].magnitude,
+                               self.engine.torque_data[-1][0].magnitude,
+                               rpm_incr.magnitude) * rpm_incr.units:
+
+            accel = self.acceleration_from_rpm_gear(rpm=rpm,
+                                                    gear=gear)
+            if accel > min_accel:
+                return [ rpm, accel.to(unit) ]
 
     def rpm_from_speed_gear(self, v, gear, unit = 'rpm'):
         wheel_speed = v / (self.tires.driven.fulld / 2)
         rpm = wheel_speed * self.trans.ratio(gear)
 
-        return rpm.to(ureg(unit).units)
+        return rpm.to(unit)
 
 
     def best_gear_at_speed(self, v):
@@ -199,9 +228,10 @@ class Racecar:
 
             wheel_torque = self.wheel_torque(v_or_rpm = s, gear = g)
             wheel_force = wheel_torque / (self.tires.driven.fulld / 2)
-            air_resistance = self.body.resistance(v = s)
+            resistance = self.body.resistance(v = s)
+            resistance += self.tires.rolling_resistance
 
-            resultant = wheel_force - air_resistance
+            resultant = wheel_force - resistance
 
             if resultant_prev > ureg('0 N') and resultant < ureg('0 N'):
                  return s
@@ -212,11 +242,15 @@ class Racecar:
                      v0 = ureg('0 km/hr'),
                      launchrpm = None,
                      trans_shift_time = ureg('0 s'),
-                     time_incr = ureg('0.01 s'),
+                     time_incr = ureg('0.005 s'),
                      verbose = False):
 
         g0 = self.best_gear_at_speed(v=v0)
-        launchrpm = launchrpm or self.max_accel_at_gear(gear = g0)[0]
+        rpm0 = self.rpm_from_speed_gear(v = v0, gear = g0)
+        try:
+            launchrpm = launchrpm or self.min_rpm_tireslip(gear = g0)[0]
+        except TypeError: # no launchrpm, engine can`t slip tires at v0
+            launchrpm = rpm0
 
         dist = 0.0 * ureg.meters
         speed = v0
@@ -227,24 +261,21 @@ class Racecar:
                       speed,
                       total_time]
 
-        if verbose:
-            print('Initial speed is {0:3.0~f}'.format(speed))
-            print('    End of simulation happens at ', end='')
+        print('Initial speed is {0:3.0~f}'.format(speed))
+        print('Initial gear is {0:n}'.format(g0))
+        print('    End of simulation happens at ', end='')
 
         if destination.dimensionality == dist.dimensionality:
             stop_crit_index = 0
-            if verbose:
-                print('total distance of {0:6.2~f}'.format(destination))
+            print('total distance of {0:6.2~f}'.format(destination))
 
         elif destination.dimensionality == speed.dimensionality:
             stop_crit_index = 1
-            if verbose:
-                print('final speed of {0:3.0~f}'.format(destination))
+            print('final speed of {0:3.0~f}'.format(destination))
 
         else:
             stop_crit_index = 3
-            if verbose:
-                print('total time of {0:4.0~f}'.format(destination))
+            print('total time of {0:4.0~f}'.format(destination))
 
         radius = self.tires.driven.fulld / 2
 
@@ -254,6 +285,7 @@ class Racecar:
 
         if rpm < launchrpm and g0 == 1:
             launching = True
+            print('Launching from {0:5.0~f}'.format(launchrpm))
 
         else:
             launching = False
@@ -262,6 +294,8 @@ class Racecar:
         g = g0
         i = 0
 
+        accel_tire = self.tires.driven.max_accel
+
         stop_crit = variables[stop_crit_index]
 
         while stop_crit <= destination:
@@ -269,18 +303,20 @@ class Racecar:
 
             if launching:
                 total_time_launching += time_incr
-                wheel_torque = self.wheel_torque(launchrpm, g)
+                rpm = launchrpm
 
-            else:
-                wheel_torque = self.wheel_torque(rpm, gear = g)
-
+            wheel_torque = self.wheel_torque(rpm, gear=g)
             wheel_force = wheel_torque / radius
             resistance = self.body.resistance(v = speed)
+            resistance += self.tires.rolling_resistance
             resultant = wheel_force - resistance
 
             accel_engine = resultant / self.mass.mass
-            accel_tire = self.tires.driven.max_accel
             accel = min(accel_engine, accel_tire)
+            if accel_engine > accel_tire:
+                tire_slip = '(T)'
+            else:
+                tire_slip = ''
 
             dist += speed * time_incr + (accel / 2) * time_incr**2
             total_time += time_incr
@@ -294,25 +330,37 @@ class Racecar:
                 print('Still running... stop criterion is at {0:4.0~f}'.format(
                     stop_crit
                 ))
-                print('    Speed: {0:3.0~f}, Accel:{1:1.2~f}'.format(speed,
-                                                accel.to('G')))
+
+                if verbose:
+                    print('   Speed: {0:3.0~f}, Accel: {1:1.3~f} {2:s}'.format(speed,
+                                                    accel.to('G'), tire_slip))
+                    print('   RPM: {0:5.0~f}, Time: {1:7.3~f}'.format(rpm, total_time))
 
 
             rpm = self.rpm_from_speed_gear(v = speed, gear = g)
             if rpm > shiftpoints[g-1]:
                 g += 1
+
+                if verbose:
+                    print('Shifted to gear {0:n} @ {1:4.0~f}'.format(g, speed))
+
                 rpm = self.rpm_from_speed_gear(v = speed, gear = g)
                 total_time += trans_shift_time
 
-            if rpm > launchrpm:
+
+            if rpm > launchrpm and launching:
                 launching = False
 
+                if verbose:
+                    print('Clutch fully engaged @ {0:4.0~f}'.format(speed))
+
+        print('\nEnd of simulation!')
+        print('Stats:')
+        print('    Total time {0:7.3~f}'.format(total_time))
+        print('    Total distance {0:5.1~f}'.format(dist))
+        print('    Final speed {0:4.1~f}'.format(speed))
+
         if verbose:
-            print('\nEnd of simulation!')
-            print('Stats:')
-            print('    Total time {0:7.3~f}'.format(total_time))
-            print('    Total distance {0:5.1~f}'.format(dist))
-            print('    Final speed {0:4.1~f}'.format(speed))
             print('-----------')
             print('    Time launching {0:4.1~f}'.format(total_time_launching))
             print('    Total shifts {0:n}'.format(g-g0))
@@ -387,6 +435,30 @@ class Engine:
 
         self.max_power = max_hp.to('cv')
         self.max_power_rpm = max_hp_rpm
+
+    def plot(self, power = True):
+        rpms = []
+        tqs = []
+        powers = []
+
+        for dp in self.torque_data:
+            rpms.append(dp[0].magnitude)
+            tqs.append(dp[1].to('kgf.m').magnitude)
+            if power:
+                pwr = dp[0]*dp[1]
+                powers.append(pwr.to('cv').magnitude)
+
+        ax = plt.subplot(111)
+        ax2 = ax.twinx()
+        ax.plot(rpms, tqs)
+        ax.set_ylabel('Torque (m-kgf)')
+        ax.set_xlabel('RPM')
+
+        if power:
+            ax2.plot(rpms, powers, 'r')
+            ax2.set_ylabel('Power (cv)')
+
+        plt.show()
 
 
 class Transmission:
@@ -479,7 +551,8 @@ class MassDistribution:
         self.height = height
 
         # mass is a quantity with mass units
-        self.mass = curb_mass - self.racecar.engine.mass - self.racecar.trans.mass
+        self.curb = curb_mass
+        self.mass = self.curb + ureg('70 kg') + ureg('288.45 kg')
 
         self.frame_linear_density = (curb_mass - self.racecar.engine.mass -
                                     self.racecar.trans.mass) / self.length
@@ -526,6 +599,8 @@ class Tire:
         self.max_accel = None
         self.max_brake = None
         self.max_lateral_load = None
+
+        self.rolling_resistance = 0 # ureg('19 lbf')
 
         self.spec = spec
 
@@ -663,6 +738,9 @@ class Tires:
 
         else:
             self.driven = [ self.front, self.rear ]
+
+        self.rolling_resistance = 2 * self.front.rolling_resistance + \
+            2* self.rear.rolling_resistance
 
 class Body:
     """"
