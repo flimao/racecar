@@ -3,6 +3,7 @@
 
 import csv
 import pint
+from pint.errors import DimensionalityError
 import matplotlib.pyplot as plt
 import numpy as np
 import re
@@ -46,18 +47,17 @@ class Racecar:
         else:
             self.trans = trans
 
-        if massd is None:
-            self.mass = MassDistribution(racecar = self,
-                                         curb_mass = ureg('1300 kg'),
-                                         length = ureg('4.644 m'),
-                                         width = ureg('1.778 m'),
-                                         height = ureg('1.473 m'))
-        else:
-            self.mass = massd
-
         if tires is None:
             self.tires = Tires(racecar = self,
                                spec = '225/45R17')
+
+        if massd is None:
+            self.mass = MassDistribution(racecar = self,
+                    curb_mass = ureg('1500 kg'),
+                    dims = (ureg('4 m'), ureg('4 m'), ureg('1.5 m')),
+                    wheelbase = ureg('2.5 m'))
+        else:
+            self.mass = massd
 
         if body is None:
             self.body = Body(racecar = self,
@@ -466,7 +466,7 @@ class Transmission:
     Class that describes the transmission
     """
 
-    def __init__(self, racecar, ratios, driven = 'FWD',
+    def __init__(self, racecar, ratios, drive = 'FWD',
                  mass =0 * ureg.kilogram):
 
         # racecar is a Racecar object
@@ -479,8 +479,8 @@ class Transmission:
         self.__ratios = None
         self.ratios = ratios
 
-        # driven axle
-        self.driven = driven
+        # drive axle
+        self.drive = drive
 
         # mass is a quantity with mass units
         self.mass = mass
@@ -532,6 +532,53 @@ class Transmission:
     def __iter__(self):
         return iter(self.ratios)
 
+class Point:
+    """
+    Class that describes a point in a MassDistribution object
+    """
+
+    def __init__(self, coords, coords_base = None, name = None):
+        """
+        coords is a 3-tuple containing the coordinates in unit length units. If given in
+         length units, coord_base must be specified, which isa 3-tuple containing the
+         length, width and height of the racecar.
+        """
+
+        self.name = name
+        self.coords = [ 0.5, 0.5, 0.5 ]
+        try:
+            for sc, c, cb in zip(self.coords, coords, coords_base):
+                try:
+                    sc = (c + ureg('0 m'))/cb
+                except DimensionalityError:
+                    sc = c
+        except TypeError: # coord_base is None
+            self.coords = coords
+
+    def __getitem__(self, item):
+        return self.coords[item]
+
+class PointMass:
+    """
+    Class that describes a point mass in a MassDistribution object
+    """
+
+    def __init__(self, coords, mass = None, coords_base = None, name = None):
+        """
+        coords is a 3-tuple containing the coordinates in unit length units. If given in
+         length units, coord_base must be specified, which isa 3-tuple containing the
+         length, width and height of the racecar.
+        """
+        self.name = name
+        self.coords = Point(coords = coords, coords_base = coords_base)
+
+        try:
+            self.mass = mass + ureg('0 kg')
+        except DimensionalityError:
+            raise DimensionalityError("Point mass must have mass unit. ")
+
+    def __getitem__(self, item):
+        return self.coords[item]
 
 
 class MassDistribution:
@@ -539,20 +586,127 @@ class MassDistribution:
     Class that describes how the racecar's mass is distributed along the frame
     """
 
-    def __init__(self, racecar, curb_mass, length, width, height):
+    def __init__(self, racecar, curb_mass, dims, wheelbase,
+                 cg = None, wheelbase_rear = None, pointmasses = None,
+                 ride_height = None):
+        """
+        Dims is a 3-tuple containing length, width and height
+
+        All length units except for length, width and height are treated
+        internally on the unit coordinate system. The units go between
+
+        0 = rear bumper, driver's door or tire contact patch
+        1 = front bumper, passenger's door or roof
+
+        So a CG that is precisely in the middle of the car has coordinates (0.5, 0.5, 0.5)
+
+        wheelbase_rear is the unit coordinate of the rear axle. So if the car is 3 m long,
+        and the rear axle is 1 meter from the rear bumper, wheelbase_rear = 0.333
+
+        pointmasses is a dictionary that contains the locations of each components which
+        are modeled as point masses. E.g.
+        >>> pointmasses = { 'engine': [ 0.8, 0.3, 0.5 ], \
+                            'battery': [ [ 0.7, 0.6, 0.4 ], ureg('10 kg') ] }
+        For the engine and the transmission, the dict entry is a 3-tuple of
+        unit lengths (or lengths) representing the point mass coordinates
+        For components other than the engine and the transmission the dict entry is a
+        2-tuple; the first element is a 3-tuple containing the coordinates, and the
+         second element is the mass of the point mass
+        """
 
         # racecar is a Racecar object
         self.racecar = racecar
         racecar.mass = self
 
-        # length, width, height is a quantity in length units
-        self.length = length
-        self.width = width
-        self.height = height
+        # length, width, height are quantities in length units
+        self.dims = dims
+        self.length, self.width, self.height = self.dims
+
+        # cg coordinates go between 0 (rear bumper, driver's door, tire contact patch)
+        # and 1 (front bumper, passenger's door, roof). If cg coords have units of length,
+        # will be converted to adimensional
+
+        self.cg = Point(cg or (0.5, 0.5, 0.5), coords_base = dims, name = 'CG')
+
+        # ride height - distance from ground to bottom of bodywork
+        self.ride_height = ride_height
+        if self.ride_height is None:
+            rh = self.racecar.tires.rear.fulld / 2
+
+            self.ride_height = (rh / self.height).magnitude
+
+        # wheelbase is measured in car lengths, so goes from 0 to 1. Will be converted
+        # if provided with length units
+        try:
+            self.wheelbase = ((wheelbase + ureg('0 m'))/ self.length).magnitude
+        except DimensionalityError: # wheelbase doesn`t have length units; assumed to
+                                   # be a fraction of length
+            self.wheelbase = wheelbase
+
+        if wheelbase_rear is None:
+            wbr = (1 - self.wheelbase) / 2
+        else:
+            try:
+                wbr = ((wheelbase_rear + ureg('0 m')) / self.length).magnitude
+            except DimensionalityError: # wheelbase_rear doesn't have length units;
+                                        # assumed to be a fraction of length
+                wbr = wheelbase_rear
+
+        self.axles = (wbr, wbr + self.wheelbase)
+
+        self.pointmasses = {}
+
+        known_masses = { 'engine': self.racecar.engine.mass,
+                         'transmission': self.racecar.trans.mass
+                    }
+
+        # best guesses for position of pointmasses
+
+        # engine:
+        # Front-engine: halfway between front axle and bumper,halfway between driver
+        #               and passenger and halfway-up
+        # Rear-engine:  over rear axle, halfway between driver and passenger and
+        #               halfway-up
+        # Mid-engine:   1/4 of the way between the axles, between the driver and passenger
+        #               and halfway-up
+        #
+        # trans:
+        # Transaxle: same lengthwise position as engine, between passenger and driver,
+        #            and halfway between engine and ride height
+        # Else:      over front axle if front engine, over rear axle if Mid-engine,
+        #            midway between driver and passenger, and same height as engine
+
+        position_guesses = {
+            'engine_front': [ (1 - self.axles[1])/2, 0.5, 0.5 ],
+            'engine_mid': [ self.axles[0] + self.wheelbase / 2, 0.5, 0.5 ],
+            'engine_rear': [ self.axles[0], 0.5, 0.5 ],
+            'transmission_transaxle': lambda:[
+                self.pointmasses['engine'][0],
+                0.5, (self.pointmasses['engine'][2] + self.ride_height) /2 ]
+        }
+
+        for name, pm in (pointmasses or {}).items():
+
+            if name in known_masses:
+                mass = known_masses[name]
+                coords = pm
+                if type(coords) == str:
+                    coords = position_guesses[name + '_' + coords]
+
+                    if type(coords) == type(lambda:1):
+                        coords = coords()
+            else:
+                mass = pm[1]
+                coords = pm[0]
+
+            pointmasses[name] = PointMass(coords = coords,
+                                          mass = mass,
+                                          coords_base = self.dims)
+
 
         # mass is a quantity with mass units
         self.curb = curb_mass
-        self.mass = self.curb + ureg('70 kg') + ureg('288.45 kg')
+        self.mass = self.curb + ureg('70 kg')
 
         self.frame_linear_density = (curb_mass - self.racecar.engine.mass -
                                     self.racecar.trans.mass) / self.length
@@ -730,10 +884,10 @@ class Tires:
             self.rear = Tire(spec = kwargs.get('front_spec'))
 
         # driven wheels
-        if self.racecar.trans.driven == 'FWD':
+        if self.racecar.trans.drive == 'FWD':
             self.driven = self.front
 
-        elif self.racecar.trans.driven == 'RWD':
+        elif self.racecar.trans.drive == 'RWD':
             self.driven = self.rear
 
         else:

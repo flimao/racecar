@@ -38,6 +38,11 @@ curb = ureg('1375 kg')
 l = ureg('4.644 m')
 w = ureg('1.778 m')
 h = ureg('1.473 m')
+wheelbase = ureg('2.651 m')
+wheelbase_rear = None
+
+pointmasses = { 'engine': 'front', 'transmission': 'transaxle',
+                'driver': 'standard'}
 
 cx = 0.28
 frontal_area = ureg('3.3557 m**2')
@@ -52,10 +57,9 @@ trans = RC.Transmission(racecar = piggyback,
 tires = RC.Tires(racecar = piggyback,
                  spec = tire_spec_piggyback)
 massd = RC.MassDistribution(racecar = piggyback,
-                            curb_mass = curb,
-                            length = l,
-                            width = w,
-                            height = h)
+                            curb_mass = curb, dims = (l, w, h),
+                            wheelbase = wheelbase, wheelbase_rear = wheelbase_rear,
+                            pointmasses = pointmasses)
 body = RC.Body(racecar = piggyback,
                cx = cx,
                frontal_area = frontal_area) # 29 cv at 120 km\h
@@ -68,10 +72,9 @@ trans_oem = RC.Transmission(racecar = oem,
 tires_oem = RC.Tires(racecar = oem,
                  spec = tire_spec_oem)
 massd_oem = RC.MassDistribution(racecar = oem,
-                            curb_mass = curb,
-                            length = l,
-                            width = w,
-                            height = h)
+                            curb_mass = curb, dims = (l, w, h),
+                            wheelbase = wheelbase, wheelbase_rear = wheelbase_rear,
+                            pointmasses = pointmasses)
 body_oem = RC.Body(racecar = oem,
                cx = cx,
                frontal_area = frontal_area) # 29 cv at 120 km\h
