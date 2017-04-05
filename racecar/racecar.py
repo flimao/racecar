@@ -545,18 +545,35 @@ class Point:
         """
 
         self.name = name
-        self.coords = [ 0.5, 0.5, 0.5 ]
+        self.coords = np.array(( 0.5, 0.5, 0.5 ), dtype = pint.UnitRegistry)
+        self.coords_base = np.array(coords_base, dtype = pint.UnitRegistry)
+
+        base0 = np.array(3*(ureg('0 m'),), dtype = pint.UnitRegistry)
         try:
-            for sc, c, cb in zip(self.coords, coords, coords_base):
-                try:
-                    sc = (c + ureg('0 m'))/cb
-                except DimensionalityError:
-                    sc = c
+            coords = np.array(coords, dtype = pint.UnitRegistry)
+            self.coords = (coords + base0)/coords_base
+
+        except DimensionalityError: # coords are already dimensionless
+            self.coords = np.array(coords, dtype = pint.UnitRegistry)
+
         except TypeError: # coord_base is None
-            self.coords = coords
+            self.coords = np.array(coords, dtype = pint.UnitRegistry)
 
     def __getitem__(self, item):
         return self.coords[item]
+
+    def __mul__(self, other):
+        return self.__class__(coords = other * self.coords,
+                              coords_base = self.coords_base)
+
+    def __add__(self, other):
+        return self.__class__(coords = other.coords + self.coords,
+                              coords_base = self.coords_base)
+
+    def __repr__(self):
+        return ('Point(coords = ({0[0]}, {0[1]}, {0[2]}), '
+                'coords_base = ({1[0]}, {1[1]}, {1[2]}), '
+                'name = {2})').format(self.coords, self.coords_base, self.name or None)
 
 class PointMass:
     """
@@ -570,7 +587,7 @@ class PointMass:
          length, width and height of the racecar.
         """
         self.name = name
-        self.coords = Point(coords = coords, coords_base = coords_base)
+        self.coords = Point(coords = coords, coords_base = coords_base, name = name)
 
         try:
             self.mass = mass + ureg('0 kg')
@@ -579,6 +596,17 @@ class PointMass:
 
     def __getitem__(self, item):
         return self.coords[item]
+
+    def __add__(self, other):
+        if type(other) != self.__class__:
+            raise TypeError('Can only add two PointMass objects.')
+
+        cg_coords = (self.coords * self.mass) + (other.coords * other.mass)
+        cg_coords *= 1/(self.mass + other.mass)
+        return self.__class__(coords = cg_coords.coords,
+                              coords_base = self.coords.coords_base,
+                              mass = self.mass + other.mass,
+                              name = 'CG')
 
 
 class MassDistribution:
@@ -634,7 +662,7 @@ class MassDistribution:
         if self.ride_height is None:
             rh = self.racecar.tires.rear.fulld / 2
 
-            self.ride_height = 1 - (rh / self.height).magnitude
+            self.ride_height = 1 - (rh / self.height).to('dimensionless').magnitude
 
         # wheelbase is measured in car lengths, so goes from 0 to 1. Will be converted
         # if provided with length units
@@ -665,7 +693,7 @@ class MassDistribution:
         # best guesses for position of pointmasses
 
         # engine:
-        # Front-engine: halfway between front axle and bumper,halfway between driver
+        # Front-engine: quarterway between front axle and bumper,halfway between driver
         #               and passenger and halfway-up
         # Rear-engine:  over rear axle, halfway between driver and passenger and
         #               halfway-up
@@ -679,11 +707,11 @@ class MassDistribution:
         #            midway between driver and passenger, and same height as engine
 
         position_guesses = {
-            'engine_front': [ (1 - self.axles[1])/2, 0.5, 0.5 ],
+            'engine_front': [ self.axles[1] + (1-self.axles[1])/4, 0.5, 0.5 ],
             'engine_mid': [ self.axles[0] + self.wheelbase / 2, 0.5, 0.5 ],
             'engine_rear': [ self.axles[0], 0.5, 0.5 ],
             'transmission_transaxle': [
-                (1 - self.axles[1]) / 2,
+                self.axles[1] + (1 - self.axles[1]) / 4,
                 0.5, (0.5 + self.ride_height) /2 ],
             'driver_standard': [ 3/4, 1/4, 0.5 ]
         }
@@ -716,6 +744,24 @@ class MassDistribution:
 
         self.frame_linear_density = (curb_mass - self.racecar.engine.mass -
                                     self.racecar.trans.mass) / self.length
+
+        self.cg = self.calc_cg()
+
+    def calc_cg(self):
+        """
+        Calculate CG position based on frame linear density and pointmasses
+        """
+
+        linear_mass = PointMass(coords = (0.5, 0.5, 0.5), coords_base = self.dims,
+                                mass = self.frame_linear_density * self.length)
+
+        cg = linear_mass
+        for n, pm in self.pointmasses.items():
+            cg += pm
+
+        return cg
+
+
 class Tire:
     """
     Class that describes a tire (wheel diameter, tread width, etc)
