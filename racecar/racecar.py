@@ -370,8 +370,8 @@ class Engine:
     Class that describes the engine
     """
 
-    def __init__(self, racecar, mass =0 * ureg.kilogram,
-                 idle = 800 * ureg.rpm,
+    def __init__(self, racecar, mass = ureg('0 kg'),
+                 idle = ureg('800 rpm'),
                  redline = None,
                  torque_data = None, torque_units = None):
 
@@ -467,7 +467,7 @@ class Transmission:
     """
 
     def __init__(self, racecar, ratios, drive = 'FWD',
-                 mass =0 * ureg.kilogram):
+                 mass = ureg('0 kg')):
 
         # racecar is a Racecar object
         self.racecar = racecar
@@ -590,13 +590,14 @@ class MassDistribution:
                  cg = None, wheelbase_rear = None, pointmasses = None,
                  ride_height = None):
         """
-        Dims is a 3-tuple containing length, width and height
+        Dims is a 3-tuple containing length, width and height, making up a right hand
+        coord system
 
         All length units except for length, width and height are treated
         internally on the unit coordinate system. The units go between
 
-        0 = rear bumper, driver's door or tire contact patch
-        1 = front bumper, passenger's door or roof
+        0 = rear bumper, driver's door or roof
+        1 = front bumper, passenger's door or tire contact patch
 
         So a CG that is precisely in the middle of the car has coordinates (0.5, 0.5, 0.5)
 
@@ -633,7 +634,7 @@ class MassDistribution:
         if self.ride_height is None:
             rh = self.racecar.tires.rear.fulld / 2
 
-            self.ride_height = (rh / self.height).magnitude
+            self.ride_height = 1 - (rh / self.height).magnitude
 
         # wheelbase is measured in car lengths, so goes from 0 to 1. Will be converted
         # if provided with length units
@@ -657,7 +658,8 @@ class MassDistribution:
         self.pointmasses = {}
 
         known_masses = { 'engine': self.racecar.engine.mass,
-                         'transmission': self.racecar.trans.mass
+                         'transmission': self.racecar.trans.mass,
+                         'driver': ureg('70 kg')
                     }
 
         # best guesses for position of pointmasses
@@ -680,9 +682,10 @@ class MassDistribution:
             'engine_front': [ (1 - self.axles[1])/2, 0.5, 0.5 ],
             'engine_mid': [ self.axles[0] + self.wheelbase / 2, 0.5, 0.5 ],
             'engine_rear': [ self.axles[0], 0.5, 0.5 ],
-            'transmission_transaxle': lambda:[
-                self.pointmasses['engine'][0],
-                0.5, (self.pointmasses['engine'][2] + self.ride_height) /2 ]
+            'transmission_transaxle': [
+                (1 - self.axles[1]) / 2,
+                0.5, (0.5 + self.ride_height) /2 ],
+            'driver_standard': [ 3/4, 1/4, 0.5 ]
         }
 
         for name, pm in (pointmasses or {}).items():
@@ -690,18 +693,21 @@ class MassDistribution:
             if name in known_masses:
                 mass = known_masses[name]
                 coords = pm
+
                 if type(coords) == str:
                     coords = position_guesses[name + '_' + coords]
 
-                    if type(coords) == type(lambda:1):
-                        coords = coords()
+                if type(coords) == type(lambda:1):
+                    coords = coords()
+
             else:
                 mass = pm[1]
                 coords = pm[0]
 
-            pointmasses[name] = PointMass(coords = coords,
+            self.pointmasses[name] = PointMass(coords = coords,
                                           mass = mass,
-                                          coords_base = self.dims)
+                                          coords_base = self.dims,
+                                          name = name)
 
 
         # mass is a quantity with mass units
@@ -710,7 +716,6 @@ class MassDistribution:
 
         self.frame_linear_density = (curb_mass - self.racecar.engine.mass -
                                     self.racecar.trans.mass) / self.length
-
 class Tire:
     """
     Class that describes a tire (wheel diameter, tread width, etc)

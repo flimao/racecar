@@ -41,6 +41,9 @@ h = ureg('1.473 m')
 wheelbase = ureg('2.651 m')
 wheelbase_rear = None
 
+engine_mass = ureg('400 kg')
+trans_mass = ureg('200 kg')
+
 pointmasses = { 'engine': 'front', 'transmission': 'transaxle',
                 'driver': 'standard'}
 
@@ -51,9 +54,11 @@ frontal_area = ureg('3.3557 m**2')
 
 piggyback = RC.Racecar(mechloss = mechloss)
 engine = RC.Engine(racecar = piggyback,
-                   torque_data = csvf_piggyback, torque_units = csvf_units)
+                   torque_data = csvf_piggyback, torque_units = csvf_units,
+                   mass = engine_mass)
 trans = RC.Transmission(racecar = piggyback,
-                        ratios = gears)
+                        ratios = gears,
+                        mass = trans_mass)
 tires = RC.Tires(racecar = piggyback,
                  spec = tire_spec_piggyback)
 massd = RC.MassDistribution(racecar = piggyback,
@@ -66,9 +71,11 @@ body = RC.Body(racecar = piggyback,
 
 oem = RC.Racecar(mechloss = mechloss)
 engine_oem = RC.Engine(racecar = oem,
-                   torque_data = csvf_oem, torque_units = csvf_units)
+                       torque_data = csvf_oem, torque_units = csvf_units,
+                       mass=engine_mass)
 trans_oem = RC.Transmission(racecar = oem,
-                        ratios = gears)
+                            ratios = gears,
+                            mass = trans_mass)
 tires_oem = RC.Tires(racecar = oem,
                  spec = tire_spec_oem)
 massd_oem = RC.MassDistribution(racecar = oem,
