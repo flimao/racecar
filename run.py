@@ -12,7 +12,7 @@ import racecar as mRC
 
 import racecar.racecar as RC
 
-from racecar import ureg, airdensity
+from racecar import u, airdensity
 
 csvf_piggyback = './data/torque-piggyback.csv'
 csvf_oem = './data/torque-oem.csv'
@@ -26,29 +26,29 @@ gears = [ 4.06,
             0.91 * 3.14/4.06,
             0.76 * 3.14/4.06]
 
-trans_shift_time = ureg('100 milliseconds')
+trans_shift_time = u('100 milliseconds')
 
 mechloss = 0.17
 
 tire_spec_oem = r'225/45R17 91V MA:0.45 ML:0.60'
 tire_spec_piggyback = r'225/45R17 91V MA:0.53 ML:0.75'
 
-curb = ureg('1375 kg')
+curb = u('1375 kg')
 
-l = ureg('4.644 m')
-w = ureg('1.778 m')
-h = ureg('1.473 m')
-wheelbase = ureg('2.651 m')
+l = u('4.644 m')
+w = u('1.778 m')
+h = u('1.473 m')
+wheelbase = u('2.651 m')
 wheelbase_rear = None
 
-engine_mass = ureg('400 kg')
-trans_mass = ureg('200 kg')
+engine_mass = u('400 kg')
+trans_mass = u('200 kg')
 
 pointmasses = { 'engine': 'front', 'transmission': 'transaxle',
                 'driver': 'standard'}
 
 cx = 0.28
-frontal_area = ureg('3.3557 m**2')
+frontal_area = u('3.3557 m**2')
 
 #torque = mRC.Series(series = csvf, units = ['revolutions/minute', 'N.m'])
 
@@ -87,17 +87,17 @@ body_oem = RC.Body(racecar = oem,
                frontal_area = frontal_area) # 29 cv at 120 km\h
 
 
-engine.torque_data.to([ None, ureg('kgf.m').units ])
+engine.torque_data.to([None, u('kgf.m').units])
 
 rpm = engine.torque_data[0][0].units
 
-v60 = ureg('60 km/hr')
-v80 = ureg('80 km/hr')
-v100 = ureg('100 km/hr')
-v120 = ureg('120 km/hr')
-dqt = ureg('1/4 mi')
-d400 = ureg('400 m')
-d1000 = ureg('1000 m')
+v60 = u('60 km/hr')
+v80 = u('80 km/hr')
+v100 = u('100 km/hr')
+v120 = u('120 km/hr')
+dqt = u('1/4 mi')
+d400 = u('400 m')
+d1000 = u('1000 m')
 
 shifts = piggyback.shiftpoints()
 

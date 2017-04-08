@@ -5,7 +5,7 @@ import csv
 
 import racecar as mRC
 
-from . import ureg
+from . import u
 
 class Series:
     """
@@ -62,9 +62,9 @@ class Series:
         units is a list with two items, same as the unit() setter
         """
 
-        global ureg # pint's unit registry
+        global u # pint's unit registry
 
-        comparison = ureg.meter
+        comparison = u.meter
 
         newus = []
         for newu, oldu in zip(units, self.units):
@@ -79,7 +79,7 @@ class Series:
                 newus.append(newu.units)
 
             else:
-                newus.append(ureg(newu).units)
+                newus.append(u(newu).units)
 
         for data_point in self.series:
             for axis_v, axis_newu in zip(data_point, newus):
@@ -96,8 +96,8 @@ class Series:
 
         # series can be a list with two columns, or a string to a csv file
 
-        global ureg
-        Q_ = ureg.Quantity
+        global u
+        Q_ = u.Quantity
 
         units = self.units
 
@@ -135,18 +135,18 @@ class Series:
         # units can be specified in string format, using pint's spec,
         # or by passing a pint unit object.
 
-        global ureg # pint's unit registry
+        global u # pint's unit registry
 
-        comparison = ureg.meter
+        comparison = u.meter
 
         try:
             us = []
-            for u in units:
+            for un in units:
 
-                if type(u) == type(comparison): # units are a pint object
-                    us.append(u)
+                if type(un) == type(comparison): # units are a pint object
+                    us.append(un)
                 else:
-                    us.append(ureg(u).units)
+                    us.append(u(un).units)
 
         except:
             raise

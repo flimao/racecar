@@ -10,21 +10,21 @@ import re
 
 import racecar.series as Series
 
-from . import ureg, airdensity
+from . import u, airdensity
 
 # define acceleration in G
-ureg.define('gravity = 9.80665 m/(s**2) = G')
+u.define('gravity = 9.80665 m/(s**2) = G')
 
 # define other non-Imperial, non-SI power units (from Wikipedia)
-ureg.define('cavalo-vapor = 735 N.m/s = cv') # portuguese
-ureg.define('Pferdestarke = 1 cv = PS') # german
-ureg.define('cheval = 1 cv = ch') # french
-ureg.define('paardenkracht = 1 cv = pk') # dutch
-ureg.define('Лошадиная сила = 1 cv = лс') # russian
-ureg.define('hästkraft = 1 cv = hk') # swedish
-ureg.define('hevosvoima = 1 cv = hv') # finnish
-ureg.define('lóerő = 1 cv = LE') # hungarian
-ureg.define('cal-putere = 1 cv = CP') # romanian
+u.define('cavalo-vapor = 735 N.m/s = cv') # portuguese
+u.define('Pferdestarke = 1 cv = PS') # german
+u.define('cheval = 1 cv = ch') # french
+u.define('paardenkracht = 1 cv = pk') # dutch
+u.define('Лошадиная сила = 1 cv = лс') # russian
+u.define('hästkraft = 1 cv = hk') # swedish
+u.define('hevosvoima = 1 cv = hv') # finnish
+u.define('lóerő = 1 cv = LE') # hungarian
+u.define('cal-putere = 1 cv = CP') # romanian
 
 class Racecar:
     """
@@ -34,7 +34,7 @@ class Racecar:
     def __init__(self, engine = None, trans = None, massd = None, tires = None,
                  body = None, mechloss = 0.15):
 
-        global ureg
+        global u
 
         # building a racecar with the following attributes
         if engine is None:
@@ -53,9 +53,9 @@ class Racecar:
 
         if massd is None:
             self.mass = MassDistribution(racecar = self,
-                    curb_mass = ureg('1500 kg'),
-                    dims = (ureg('4 m'), ureg('4 m'), ureg('1.5 m')),
-                    wheelbase = ureg('2.5 m'))
+                                         curb_mass = u('1500 kg'),
+                                         dims = (u('4 m'), u('4 m'), u('1.5 m')),
+                                         wheelbase = u('2.5 m'))
         else:
             self.mass = massd
 
@@ -72,7 +72,7 @@ class Racecar:
             first converted into rpm given the gear.
         """
 
-        if v_or_rpm.dimensionality == ureg('km/hr').dimensionality:
+        if v_or_rpm.dimensionality == u('km/hr').dimensionality:
             rpm = self.rpm_from_speed_gear(v = v_or_rpm, gear = gear)
         else:
             rpm = v_or_rpm
@@ -86,7 +86,7 @@ class Racecar:
         """
         speed = (rpm / self.trans.ratio(gear)) * self.tires.driven.fulld / 2
 
-        return speed.to(ureg(unit))
+        return speed.to(u(unit))
 
     def acceleration_from_rpm_gear(self, rpm, gear,
                                    resistance = True, unit = 'G'):
@@ -110,15 +110,15 @@ class Racecar:
 
         accel = (wheel_force - resist) / self.mass.mass
 
-        return accel.to(ureg(unit))
+        return accel.to(u(unit))
 
     def weight_to_power(self):
         return self.mass.curb / self.engine.max_power
 
-    def max_accel_at_gear(self, gear = 1, rpm_incr = 20 * ureg.rpm,
+    def max_accel_at_gear(self, gear = 1, rpm_incr =20 * u.rpm,
                           unit = 'G'):
 
-        max_accel = 0 * ureg(unit).units
+        max_accel = 0 * u(unit).units
         max_accel_rpm = 0 * rpm_incr.units
 
         for rpm in np.linspace(self.engine.torque_data[0][0].magnitude,
@@ -133,7 +133,7 @@ class Racecar:
 
         return [ max_accel_rpm, max_accel.to(unit) ]
 
-    def min_rpm_tireslip(self, gear, rpm_incr = 20 * ureg.rpm, unit = 'G'):
+    def min_rpm_tireslip(self, gear, rpm_incr =20 * u.rpm, unit ='G'):
         """
         Calculate the minimum RPM at selected gear that makes tires slip on launch
         """
@@ -161,7 +161,7 @@ class Racecar:
         gear that transmits the most torque to the wheels
         """
 
-        max_wtq = ureg('0 N.m')
+        max_wtq = u('0 N.m')
         best_gear = 1
 
         for g in range(self.trans.ngears):
@@ -181,7 +181,7 @@ class Racecar:
 
         return best_gear
 
-    def shiftpoints(self, v_incr = ureg('1 km/hr')):
+    def shiftpoints(self, v_incr = u('1 km/hr')):
         """
         Calculates the best shiftpoints for each gear
         Returns a list with each shiftpoint
@@ -207,7 +207,7 @@ class Racecar:
 
         return shiftpoints
 
-    def top_speed(self, v_incr = ureg('1 km/hr')):
+    def top_speed(self, v_incr = u('1 km/hr')):
         """
         Estimates the top speed
         """
@@ -215,9 +215,9 @@ class Racecar:
         max_theo_speed = self.speed_from_rpm_gear(rpm = self.engine.redline,
                                              gear = self.trans.ngears)
 
-        top_speed = ureg('0 km/hr')
+        top_speed = u('0 km/hr')
 
-        resultant_prev = ureg('10**5 kgf')
+        resultant_prev = u('10**5 kgf')
 
         n = max_theo_speed.magnitude / v_incr.magnitude
 
@@ -233,17 +233,17 @@ class Racecar:
 
             resultant = wheel_force - resistance
 
-            if resultant_prev > ureg('0 N') and resultant < ureg('0 N'):
+            if resultant_prev > u('0 N') and resultant < u('0 N'):
                  return s
             else:
                 resultant_prev = resultant
 
     def go(self, destination, shiftpoints,
-                     v0 = ureg('0 km/hr'),
-                     launchrpm = None,
-                     trans_shift_time = ureg('0 s'),
-                     time_incr = ureg('0.005 s'),
-                     verbose = False):
+           v0 = u('0 km/hr'),
+           launchrpm = None,
+           trans_shift_time = u('0 s'),
+           time_incr = u('0.005 s'),
+           verbose = False):
 
         g0 = self.best_gear_at_speed(v=v0)
         rpm0 = self.rpm_from_speed_gear(v = v0, gear = g0)
@@ -252,10 +252,10 @@ class Racecar:
         except TypeError: # no launchrpm, engine can`t slip tires at v0
             launchrpm = rpm0
 
-        dist = 0.0 * ureg.meters
+        dist = 0.0 * u.meters
         speed = v0
-        total_time = 0.0 * ureg.s
-        total_time_launching = 0.0 * ureg.s
+        total_time = 0.0 * u.s
+        total_time_launching = 0.0 * u.s
 
         variables = [ dist,
                       speed,
@@ -370,8 +370,8 @@ class Engine:
     Class that describes the engine
     """
 
-    def __init__(self, racecar, mass = ureg('0 kg'),
-                 idle = ureg('800 rpm'),
+    def __init__(self, racecar, mass = u('0 kg'),
+                 idle = u('800 rpm'),
                  redline = None,
                  torque_data = None, torque_units = None):
 
@@ -414,7 +414,7 @@ class Engine:
                            units = ('rpm', 'N.m')):
         # units specified in pint format
 
-        global ureg
+        global u
 
         self.torque_data = Series.Series(series = csv_file,
                                       units = units)
@@ -425,7 +425,7 @@ class Engine:
 
         self.redline = self.torque_data[-1][0]
 
-        max_hp = ureg('cv')
+        max_hp = u('cv')
         max_hp_rpm = self.idle
         for rpm, tq in self.torque_data:
             hp = (rpm * tq)
@@ -467,7 +467,7 @@ class Transmission:
     """
 
     def __init__(self, racecar, ratios, drive = 'FWD',
-                 mass = ureg('0 kg')):
+                 mass = u('0 kg')):
 
         # racecar is a Racecar object
         self.racecar = racecar
@@ -487,7 +487,8 @@ class Transmission:
 
     def ratio(self, gear):
         """"
-        Returns the final gear ratio, including the diff ratio for the specified gear
+        Returns the final gear ratio, including the final drive ratio for the 
+        specified gear
         """
         try:
             return self.ratios[0] * self.ratios[gear]
@@ -523,6 +524,58 @@ class Transmission:
         self.__ratios =  ratio_list
         self.ngears = len(self.__ratios) - 1
 
+    def diff(self, engine_torque = None, max_torque = None):
+        """
+        Calculates how much torque is available at each wheel.
+        This function will be different for each kind of differential
+        the function will return a 2 x 2 matrix:
+        diff[0,0] = torque at rear left wheel
+        diff[0,1] = torque at rear right wheel
+        diff[1,0] = torque at front left wheel
+        diff[1,1] = torque at front right wheel
+        
+        max_torque is a 2 x 2 matrix with the max_torque for each wheel
+        max_torque[i,j] = None means unlimited.
+        """
+
+        engine_torque = engine_torque or u('1 kgf.m')
+
+        # open differentials
+
+        d = np.ones((2,2)) * (1/2)
+
+        if self.drive == 'FWD':
+            d[:,0] = 0
+
+        elif self.drive == 'RWD':
+            d[:,1] = 0
+
+        else: # any kind of all wheel drive with permanent open differential
+            d *= 1/2
+
+        # ignore undriven axles
+        mask = (d>0)
+
+        # make d into a quantity
+        d = d * u('dimensionless')
+
+        if np.shape(max_torque) == (2,2): # there is a limit
+
+            # get limits for each wheel
+            engine_torque_per_wheel = max_torque[mask] / d[mask]
+
+            # get the lowest of these
+            max_engine_torque = np.min(engine_torque_per_wheel)
+
+            # for some reason, np.min doesn`t work with pint units
+            # torque actually applied is the lowest between engine and max torque
+            t = min(max_engine_torque, engine_torque)
+
+        else:
+            t = engine_torque
+
+        return t * d
+
     def __getitem__(self, index):
         return self.ratios[index]
 
@@ -548,7 +601,7 @@ class Point:
         self.coords = np.array(( 0.5, 0.5, 0.5 ), dtype = pint.UnitRegistry)
         self.coords_base = np.array(coords_base, dtype = pint.UnitRegistry)
 
-        base0 = np.array(3*(ureg('0 m'),), dtype = pint.UnitRegistry)
+        base0 = np.array(3 * (u('0 m'),), dtype = pint.UnitRegistry)
         try:
             coords = np.array(coords, dtype = pint.UnitRegistry)
             self.coords = (coords + base0)/coords_base
@@ -590,7 +643,7 @@ class PointMass:
         self.coords = Point(coords = coords, coords_base = coords_base, name = name)
 
         try:
-            self.mass = mass + ureg('0 kg')
+            self.mass = mass + u('0 kg')
         except DimensionalityError:
             raise DimensionalityError("Point mass must have mass unit. ")
 
@@ -635,7 +688,7 @@ class MassDistribution:
         pointmasses is a dictionary that contains the locations of each components which
         are modeled as point masses. E.g.
         >>> pointmasses = { 'engine': [ 0.8, 0.3, 0.5 ], \
-                            'battery': [ [ 0.7, 0.6, 0.4 ], ureg('10 kg') ] }
+                            'battery': [ [ 0.7, 0.6, 0.4 ], u('10 kg') ] }
         For the engine and the transmission, the dict entry is a 3-tuple of
         unit lengths (or lengths) representing the point mass coordinates
         For components other than the engine and the transmission the dict entry is a
@@ -667,7 +720,7 @@ class MassDistribution:
         # wheelbase is measured in car lengths, so goes from 0 to 1. Will be converted
         # if provided with length units
         try:
-            self.wheelbase = ((wheelbase + ureg('0 m'))/ self.length).magnitude
+            self.wheelbase = ((wheelbase + u('0 m')) / self.length).magnitude
         except DimensionalityError: # wheelbase doesn`t have length units; assumed to
                                    # be a fraction of length
             self.wheelbase = wheelbase
@@ -676,7 +729,7 @@ class MassDistribution:
             wbr = (1 - self.wheelbase) / 2
         else:
             try:
-                wbr = ((wheelbase_rear + ureg('0 m')) / self.length).magnitude
+                wbr = ((wheelbase_rear + u('0 m')) / self.length).magnitude
             except DimensionalityError: # wheelbase_rear doesn't have length units;
                                         # assumed to be a fraction of length
                 wbr = wheelbase_rear
@@ -687,7 +740,7 @@ class MassDistribution:
 
         known_masses = { 'engine': self.racecar.engine.mass,
                          'transmission': self.racecar.trans.mass,
-                         'driver': ureg('70 kg')
+                         'driver': u('70 kg')
                     }
 
         # best guesses for position of pointmasses
@@ -740,7 +793,7 @@ class MassDistribution:
 
         # mass is a quantity with mass units
         self.curb = curb_mass
-        self.mass = self.curb + ureg('70 kg')
+        self.mass = self.curb + u('70 kg')
 
         self.frame_linear_density = (curb_mass - self.racecar.engine.mass -
                                     self.racecar.trans.mass) / self.length
@@ -805,7 +858,7 @@ class Tire:
         self.max_brake = None
         self.max_lateral_load = None
 
-        self.rolling_resistance = 0 # ureg('19 lbf')
+        self.rolling_resistance = 0 # u('19 lbf')
 
         self.spec = spec
 
@@ -825,11 +878,11 @@ class Tire:
            ML:N.NN    - max lateral loads in Gs (optional, default = 1G)
         """
 
-        global ureg
+        global u
 
 
-        default_MA = 1 * ureg.G
-        default_ML = 1 * ureg.G
+        default_MA = 1 * u.G
+        default_ML = 1 * u.G
 
         re_str = r'(P|LT|ST|T)?(\d{2,3})(?:\/|-)(\d{2})(R|B|D|-)(\d{1,2})'
         re_str += r'(?:\s([0-9]{2,3})(\(?(?:A[1-8]|[B-Z])\)?))?'
@@ -848,7 +901,7 @@ class Tire:
             self.application = spec_re.group(1)
 
             # rubber width
-            self.width = float(spec_re.group(2)) * ureg.millimeters
+            self.width = float(spec_re.group(2)) * u.millimeters
 
             # rubber height
             self.aspectratio = float(spec_re.group(3))/100
@@ -858,7 +911,7 @@ class Tire:
             self.construction = spec_re.group(4) or 'R'
 
             # wheel diameter
-            self.wheeld = float(spec_re.group(5)) * ureg.inches
+            self.wheeld = float(spec_re.group(5)) * u.inches
 
             # full diameter
             self.fulld = self.wheeld + 2 * self.rubberheight
@@ -874,19 +927,19 @@ class Tire:
 
             # max accels - max acceleration
             try:
-                self.max_accel = float(spec_re.group(8)) * ureg.G
+                self.max_accel = float(spec_re.group(8)) * u.G
             except TypeError: # no max accel information
                 self.max_accel = default_MA
 
             # max accels - max brake
             try:
-                self.max_brake = float(spec_re.group(9)) * ureg.G
+                self.max_brake = float(spec_re.group(9)) * u.G
             except TypeError:  # no max brake information
                 self.max_brake = self.max_accel
 
             # max accels - max lateral load
             try:
-                self.max_lateral_load = float(spec_re.group(10)) * ureg.G
+                self.max_lateral_load = float(spec_re.group(10)) * u.G
             except TypeError:  # no max lateral load information
                 self.max_lateral_load = default_ML
 
@@ -972,7 +1025,7 @@ class Body:
 
         if power:
             resistance *= v
-            resistance.ito(ureg.cv)
+            resistance.ito(u.cv)
 
         return resistance
 
@@ -985,5 +1038,5 @@ class Body:
 
         area = 2 * power / (airdensity * v**3 * self.cx)
 
-        self.frontal_area = area.to(ureg(unit).units)
+        self.frontal_area = area.to(u(unit).units)
         return self.frontal_area
