@@ -7,6 +7,8 @@ from pint.errors import DimensionalityError
 import matplotlib.pyplot as plt
 import numpy as np
 import re
+from scipy.optimize import fsolve
+import sympy as sp
 
 import racecar.series as Series
 
@@ -814,6 +816,97 @@ class MassDistribution:
 
         return cg
 
+    def _montarsist(self, engine_torque = None, units = 'kgf', cg = None, sim = False):
+        wheel_torque = engine_torque or self.racecar.engine.max_torque
+        wheel_torque = self.racecar.trans.diff(wheel_torque)
+        wheel_force = (wheel_torque / self.racecar.tires.driven.fulld/2).to(units)
+
+        F00 = wheel_force[0, 0].to(units).magnitude
+        F01 = wheel_force[1, 0].to(units).magnitude
+        F10 = wheel_force[0, 1].to(units).magnitude
+        F11 = wheel_force[1, 1].to(units).magnitude
+
+        # axles
+
+        x0 = self.axles[0]
+        x1 = self.axles[1]
+
+        # cg
+        xcg_ = self.cg.coords[0]
+        ycg = self.cg.coords[1]
+        zcg = self.cg.coords[2]
+
+        xcg = (xcg_ - x0)/(x1-x0)
+
+        if cg is not None:
+            xcg = cg[0]
+            ycg = cg[1]
+            zcg = cg[2]
+
+        # roll center
+        xrc0 = 0
+        yrc0 = ycg
+        zrc0 = (1 + zcg)/2
+
+        xrc1 = 1
+        yrc1 = ycg
+        zrc1 = (1 + zcg) / 2
+
+        k = u('(100 kgf) / (1 cm)').to('kgf/m').magnitude
+
+        m = self.mass.to('kg').magnitude
+        g = u('1 G').magnitude
+        L = (self.dims[0] * (x1 - x0)).to('m').magnitude
+        W = self.dims[1].to('m').magnitude
+        H = self.dims[2].to('m').magnitude
+
+        if not sim:
+            def eqsystem(p):
+                N00, N01, N10, ntx, nty, ntz = p
+                absnt = np.sqrt(ntx**2 + nty**2 + ntz**2)
+                nx = ntx / absnt
+                ny = nty / absnt
+                nz = ntz / absnt
+                N11 = m*g - N00 - N01 - N10
+                eq2 = N00 * yrc0 + N10 * yrc1 - N01*(1-yrc0)-N11*(1-yrc0)-m*g*(yrc1-ycg)
+                eq3 = (N10 + N11) * (1-xcg) - (N00 + N01)*xcg
+                eq4 =           ny * W + nz * (N00 - N01) / k
+                eq5 = nx * L +           nz * (N00 - N10) / k
+                eq6 = nx * L +  ny * W + nz * (N00 - N11) / k
+                eq7 = ntx ** 2 + nty ** 2 + ntz ** 2 - absnt**2
+                return eq2, eq3, eq4, eq5, eq6, eq7
+
+            p0 = np.array((m * g / 3, # N00
+                           m * g / 4, # N01
+                           m * g / 5, # N10, no N11 because it is calculated
+                           1, 1, 1)) # coords director
+            p = fsolve(func = eqsystem, x0 = p0, xtol=10**(-12))
+
+        else:
+            N00 = sp.Symbol('N00')
+            N01 = sp.Symbol('N01')
+            N10 = sp.Symbol('N10')
+            ntr_ = sp.Symbol('nr_')
+            ntp_ = sp.Symbol('np_')
+            ntyaw_ = sp.Symbol('nyaw_')
+            absnt = (ntyaw_**2 + ntp_**2 + ntr_**2)**0.5
+            nyaw_ = ntyaw_ / absnt
+            np_ = ntp_ / absnt
+            nr_ = ntr_ / absnt
+            N11 = m * g - N00 - N01 - N10
+            symbols = (N00, N01, N10, ntr_, ntp_, ntyaw_)
+            eqs = []
+            eqs.append(N00*yrc0 + N10*yrc1 - N01*(1 - yrc0) - N11*(1-yrc0) - m*g*(yrc1 - ycg))
+            eqs.append((N10 + N11) * (1 - xcg) - (N00 + N01) * xcg)
+            eqs.append(np_ * W + nyaw_ * (N00 - N01) * k)
+            eqs.append(nr_ * L + nyaw_ * (N00 - N10) * k)
+            eqs.append(nr_ * L + np_ * W + nyaw_ * (N00 - N11) * k)
+            eqs.append(ntyaw_ ** 2 + ntp_ ** 2 + ntr_ ** 2 - absnt ** 2)
+
+            return eqs, symbols
+
+
+        return eqsystem, p0, p
 
 class Tire:
     """

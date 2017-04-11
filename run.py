@@ -5,7 +5,9 @@
 Run the racecar analyses available in the module
 """
 
-import csv
+import numpy as np
+import sympy.solvers as sv
+
 import pint
 
 import racecar as mRC
@@ -113,4 +115,51 @@ shifts_oem = oem.shiftpoints()
 #             trans_shift_time = trans_shift_time,
 #             verbose = True)
 
-oem.top_speed()
+#oem.top_speed()
+
+cg = (0.65, 0.48, 0.5)
+
+P = (massd.mass * u('1 G')).to('kgf')
+
+dN00 = (1-cg[0])*(1-cg[1])
+dN01 = (1-cg[0])*(cg[1])
+dN10 = (cg[0])*(1-cg[1])
+dN11 = (cg[0])*(cg[1])
+
+N00_est = P*dN00
+N01_est = P*dN01
+N10_est = P*dN10
+N11_est = P*dN11
+
+f = (N00_est + N01_est + N10_est + N11_est) / P
+
+N00_en = N00_est / f
+N01_en = N01_est / f
+N10_en = N10_est / f
+N11_en = N11_est / f
+
+s_en = N00_en + N01_en + N10_en + N11_en
+
+eqs, p0, p = massd._montarsist(cg = cg)
+
+n00 = p[0] * u('kgf')
+n01 = p[1] * u('kgf')
+n10 = p[2] * u('kgf')
+n11 = (P - n00 - n01 - n10).to('kgf')
+s = n00 + n01 + n10 + n11
+ntx, nty, ntz = p[3:6]
+nabs = np.sqrt(ntx**2 + nty**2 + ntz**2)
+nx, ny, nz = np.array((ntx, nty, ntz)) / nabs
+theta_roll = np.arccos(nz / np.sqrt(nz**2 + ny**2)) * 180 / np.pi
+theta_pitch = np.arccos(nz / np.sqrt(nz**2 + nx**2)) * 180 / np.pi
+print('   P = {0:~5.0f}'.format(P))
+print(' N00 = {0:~5.0f} | {1:~5.0f}'.format(n00, N00_en))
+print(' N01 = {0:~5.0f} | {1:~5.0f}'.format(n01, N01_en))
+print(' N10 = {0:~5.0f} | {1:~5.0f}'.format(n10, N10_en))
+print(' N11 = {0:~5.0f} | {1:~5.0f}'.format(n11, N11_en))
+print('____________________________')
+print('Soma = {0:~5.0f} | {1:~5.0f}'.format(s, s_en))
+print('Coords: (nx = {0:5.3f}, ny = {1:5.3f}, nz = {2:5.3f})'.format(nx, ny, nz))
+print('        |n| = {0:5.3f}'.format(nabs))
+print(' Angulo Roll = {0:6.3f} deg'.format(theta_roll))
+print('Angulo Pitch = {0:6.3f} deg'.format(theta_pitch))
