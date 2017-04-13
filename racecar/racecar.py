@@ -816,10 +816,15 @@ class MassDistribution:
 
         return cg
 
-    def _montarsist(self, engine_torque = None, units = 'kgf', cg = None, sim = False):
-        wheel_torque = engine_torque or self.racecar.engine.max_torque
-        wheel_torque = self.racecar.trans.diff(wheel_torque)
+    def _montarsist(self, engine_torque = None, units = 'kgf', cg = None, sim = False, k = u('(100 kgf) / (1 cm)')):
+        torque = engine_torque
+        if torque is None: torque = self.racecar.engine.max_torque
+
+        print(torque)
+        wheel_torque = self.racecar.trans.diff(torque * self.racecar.trans.ratios[0] * self.racecar.trans.ratios[1])
         wheel_force = (wheel_torque / self.racecar.tires.driven.fulld/2).to(units)
+
+        print(wheel_force)
 
         F00 = wheel_force[0, 0].to(units).magnitude
         F01 = wheel_force[1, 0].to(units).magnitude
@@ -836,7 +841,7 @@ class MassDistribution:
         ycg = self.cg.coords[1]
         zcg = self.cg.coords[2]
 
-        xcg = (xcg_ - x0)/(x1-x0)
+        xcg = (xcg_ - x0) / (x1 - x0)
 
         if cg is not None:
             xcg = cg[0]
@@ -852,9 +857,10 @@ class MassDistribution:
         yrc1 = ycg
         zrc1 = (1 + zcg) / 2
 
-        k = u('(100 kgf) / (1 cm)').to('kgf/m').magnitude
+        k = k.to('kgf/m').magnitude
 
         m = self.mass.to('kg').magnitude
+        ax = (F00 + F01 + F10 + F11) / m
         g = u('1 G').magnitude
         L = (self.dims[0] * (x1 - x0)).to('m').magnitude
         W = self.dims[1].to('m').magnitude
@@ -870,6 +876,8 @@ class MassDistribution:
                 N11 = m*g - N00 - N01 - N10
                 eq2 = N00 * yrc0 + N10 * yrc1 - N01*(1-yrc0)-N11*(1-yrc0)-m*g*(yrc1-ycg)
                 eq3 = (N10 + N11) * (1-xcg) - (N00 + N01)*xcg
+                eq3 += (F00+F01+F10+F11)*H/L
+                eq3 -= (nx/nz) * ((F10 + F11)*(1-xcg) - (F00+F01)*xcg)
                 eq4 =           ny * W + nz * (N00 - N01) / k
                 eq5 = nx * L +           nz * (N00 - N10) / k
                 eq6 = nx * L +  ny * W + nz * (N00 - N11) / k
@@ -906,7 +914,7 @@ class MassDistribution:
             return eqs, symbols
 
 
-        return eqsystem, p0, p
+        return eqsystem, p0, p, ax
 
 class Tire:
     """

@@ -56,7 +56,7 @@ frontal_area = u('3.3557 m**2')
 
 piggyback = RC.Racecar(mechloss = mechloss)
 engine = RC.Engine(racecar = piggyback,
-                   torque_data = csvf_piggyback, torque_units = csvf_units,
+                   torque_data = csvf_oem, torque_units = csvf_units,
                    mass = engine_mass)
 trans = RC.Transmission(racecar = piggyback,
                         ratios = gears,
@@ -101,9 +101,9 @@ dqt = u('1/4 mi')
 d400 = u('400 m')
 d1000 = u('1000 m')
 
-shifts = piggyback.shiftpoints()
+#shifts = piggyback.shiftpoints()
 
-shifts_oem = oem.shiftpoints()
+#shifts_oem = oem.shiftpoints()
 
 #piggyback.go(v100, shiftpoints = shifts,
 #             trans_shift_time = trans_shift_time,
@@ -118,6 +118,10 @@ shifts_oem = oem.shiftpoints()
 #oem.top_speed()
 
 cg = (0.65, 0.48, 0.5)
+cg = massd.cg
+
+k_dura = u('(100 kgf) / (1 cm)')
+k_mole = u('(1 kgf) / (1 cm)')
 
 P = (massd.mass * u('1 G')).to('kgf')
 
@@ -140,7 +144,7 @@ N11_en = N11_est / f
 
 s_en = N00_en + N01_en + N10_en + N11_en
 
-eqs, p0, p = massd._montarsist(cg = cg)
+eqs, p0, p, ax = massd._montarsist(engine_torque=u('40 kgf.m'), cg=cg, k = k_dura)
 
 n00 = p[0] * u('kgf')
 n01 = p[1] * u('kgf')
@@ -149,10 +153,11 @@ n11 = (P - n00 - n01 - n10).to('kgf')
 s = n00 + n01 + n10 + n11
 ntx, nty, ntz = p[3:6]
 nabs = np.sqrt(ntx**2 + nty**2 + ntz**2)
-nx, ny, nz = np.array((ntx, nty, ntz)) / nabs
-theta_roll = np.arccos(nz / np.sqrt(nz**2 + ny**2)) * 180 / np.pi
-theta_pitch = np.arccos(nz / np.sqrt(nz**2 + nx**2)) * 180 / np.pi
+nx, ny, nz = np.array((-ntx, nty, ntz)) / nabs
+theta_roll = np.arccos(nz / np.sqrt(nz**2 + ny**2)) * (180 / np.pi) * (ny/abs(ny))
+theta_pitch = np.arccos(nz / np.sqrt(nz**2 + nx**2)) * (180 / np.pi) * (nx/abs(nx))
 print('   P = {0:~5.0f}'.format(P))
+print('      Calculated | Estimated')
 print(' N00 = {0:~5.0f} | {1:~5.0f}'.format(n00, N00_en))
 print(' N01 = {0:~5.0f} | {1:~5.0f}'.format(n01, N01_en))
 print(' N10 = {0:~5.0f} | {1:~5.0f}'.format(n10, N10_en))
@@ -161,5 +166,6 @@ print('____________________________')
 print('Soma = {0:~5.0f} | {1:~5.0f}'.format(s, s_en))
 print('Coords: (nx = {0:5.3f}, ny = {1:5.3f}, nz = {2:5.3f})'.format(nx, ny, nz))
 print('        |n| = {0:5.3f}'.format(nabs))
+print('       Accel = {0:6.3f} G'.format(ax))
 print(' Angulo Roll = {0:6.3f} deg'.format(theta_roll))
 print('Angulo Pitch = {0:6.3f} deg'.format(theta_pitch))
